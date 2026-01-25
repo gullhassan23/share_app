@@ -160,11 +160,31 @@ class _PairingScreenState extends State<PairingScreen>
             Column(children: [Lottie.asset('assets/lottie/wifi.json')]),
             Text('From: ${_pairedDevice!.name}'),
             const SizedBox(height: 8),
-            Text(
-              'File: ${meta.name}',
-              style: const TextStyle(fontWeight: FontWeight.bold),
+            Container(
+              decoration: BoxDecoration(
+                color: Colors.grey.shade200,
+                borderRadius: BorderRadius.circular(10),
+              ),
+
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Image.asset(
+                    'assets/icons/document_image.png',
+                    width: 50,
+                    height: 50,
+                  ),
+                  Column(
+                    children: [
+                      Text(meta.name),
+                      SizedBox(height: 8),
+                      Text(meta.size.toString()),
+                    ],
+                  ),
+                ],
+              ),
             ),
-            Text('Size: ${_formatFileSize(meta.size)}'),
+            // Text('Size: ${_formatFileSize(meta.size)}'),
             const SizedBox(height: 16),
             const Text(
               'Do you want to accept this file?',

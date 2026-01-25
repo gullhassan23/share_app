@@ -365,7 +365,7 @@ class _TransferFileScreenState extends State<TransferFileScreen> {
                         "UPLOADING DATA....",
                         style: GoogleFonts.roboto(
                           color: Colors.blue,
-                          fontSize: 30,
+                          fontSize: 20,
                           fontWeight: FontWeight.bold,
                         ),
                       ),
