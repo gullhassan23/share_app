@@ -6,8 +6,11 @@ import 'package:get/get.dart';
 import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
 import 'package:gal/gal.dart';
+import 'package:file_picker/file_picker.dart';
 import '../models/file_meta.dart';
+import '../models/device_info.dart';
 import 'progress_controller.dart';
+import 'pairing_controller.dart';
 
 class TransferController extends GetxController {
   final progress = Get.put(ProgressController());
@@ -63,7 +66,7 @@ class TransferController extends GetxController {
       String? savePath;
       FileMeta? meta;
       int received = 0;
-      
+
       // Receiver-side progress tracking
       DateTime? receiveStartTime;
       DateTime lastReceiveProgressUpdate = DateTime.now();
@@ -71,7 +74,7 @@ class TransferController extends GetxController {
 
       try {
         print('⏳ Starting file reception process...');
-        
+
         // Reset receiver progress for new transfer
         progress.receiveProgress.value = 0.0;
         progress.receivedMB.value = 0.0;
@@ -170,22 +173,23 @@ class TransferController extends GetxController {
               final progressValue = received / meta.size;
               _recvStream?.add(progressValue);
               progress.receiveProgress.value = progressValue;
-              
+
               // Calculate and update MB received
               final receivedMB = received / (1024 * 1024);
               progress.receivedMB.value = receivedMB;
-              
+
               // Calculate receive speed (update every 100ms for smooth UI)
               final now = DateTime.now();
-              final timeSinceLastUpdate = now.difference(lastReceiveProgressUpdate).inMilliseconds;
+              final timeSinceLastUpdate =
+                  now.difference(lastReceiveProgressUpdate).inMilliseconds;
               if (timeSinceLastUpdate >= 100 && receiveStartTime != null) {
                 final mbDelta = receivedMB - lastReceivedMB;
                 final timeDelta = timeSinceLastUpdate / 1000.0;
-                
+
                 if (timeDelta > 0) {
                   progress.receiveSpeedMBps.value = mbDelta / timeDelta;
                 }
-                
+
                 lastReceiveProgressUpdate = now;
                 lastReceivedMB = receivedMB;
               }
@@ -290,7 +294,10 @@ class TransferController extends GetxController {
   /// **When called:** Called automatically after file reception is complete and verified
   /// **Side:** RECEIVER side - auto-saves media files
   /// **Behavior:** Only saves images/videos, silently skips other file types
-  Future<void> _autoSaveToGalleryIfMedia(String sourcePath, String fileName) async {
+  Future<void> _autoSaveToGalleryIfMedia(
+    String sourcePath,
+    String fileName,
+  ) async {
     try {
       // Check if it's an image or video
       final ext = p.extension(fileName).toLowerCase();
@@ -514,7 +521,7 @@ class TransferController extends GetxController {
       /// v = progress (0.0 - 1.0)
       final now = DateTime.now();
       final elapsed = now.difference(startTime).inMilliseconds / 1000;
-      
+
       // Update progress immediately
       progress.sendProgress.value = v;
 
@@ -529,11 +536,11 @@ class TransferController extends GetxController {
         // Calculate speed based on recent progress
         final mbDelta = sentMB - lastSentMB;
         final timeDelta = timeSinceLastUpdate / 1000.0;
-        
+
         if (timeDelta > 0) {
           progress.speedMBps.value = mbDelta / timeDelta;
         }
-        
+
         lastUpdateTime = now;
         lastSentMB = sentMB;
       }
@@ -565,6 +572,96 @@ class TransferController extends GetxController {
       'port': port,
       'sendPort': _receivePort!.sendPort,
     });
+  }
+
+  /// Opens file picker and returns selected file path
+  ///
+  /// **Purpose:** Handles file selection logic in the controller layer
+  /// **Why:** Keeps file selection business logic out of UI
+  /// **When called:** Called by initiateFileTransfer or directly for custom file selection
+  /// **Side:** SENDER side - file selection
+  /// **Returns:** File path if selected, null if cancelled
+  Future<String?> selectFile({
+    FileType type = FileType.any,
+    List<String>? allowedExtensions,
+  }) async {
+    print(
+      '📁 Opening file picker with type: $type, extensions: $allowedExtensions',
+    );
+
+    FilePickerResult? result;
+    try {
+      if (type == FileType.custom && allowedExtensions != null) {
+        result = await FilePicker.platform.pickFiles(
+          type: type,
+          allowedExtensions: allowedExtensions,
+          withReadStream: true,
+        );
+      } else {
+        result = await FilePicker.platform.pickFiles(
+          type: type,
+          withReadStream: true,
+        );
+      }
+
+      print(
+        '📁 File picker result: ${result != null ? 'Success' : 'Cancelled'}',
+      );
+      if (result != null && result.files.isNotEmpty) {
+        final path = result.files.first.path;
+        print('📁 Selected file path: $path');
+        return path;
+      }
+    } catch (e) {
+      print('❌ File picker error: $e');
+      throw Exception('Failed to open file picker: $e');
+    }
+
+    return null;
+  }
+
+  /// Initiates a complete file transfer to a paired device
+  ///
+  /// **Purpose:** Handles the complete flow of selecting a file, sending offer, and transferring
+  /// **Why:** Centralizes transfer coordination logic in the controller layer
+  /// **When called:** Called from TransferScreen when user wants to send a file
+  /// **Side:** SENDER side - coordinates file selection and transfer
+  /// **Flow:** 1. Select file → 2. Send offer → 3. If accepted, transfer file
+  Future<void> initiateFileTransfer(DeviceInfo targetDevice) async {
+    try {
+      // Step 1: Select file
+      final filePath = await selectFile();
+      if (filePath == null) {
+        print('📁 File selection cancelled');
+        return;
+      }
+
+      // Step 2: Create file metadata
+      final file = File(filePath);
+      final meta = FileMeta(
+        name: p.basename(filePath),
+        size: await file.length(),
+        type: _extType(filePath),
+      );
+
+      // Step 3: Send offer and wait for response
+      final pairing = Get.find<PairingController>();
+      final accepted = await pairing.sendOffer(targetDevice, meta);
+
+      if (accepted) {
+        print('✅ Offer accepted! Starting file transfer...');
+        // Step 4: Transfer the file
+        await sendFile(filePath, targetDevice.ip, targetDevice.transferPort);
+      } else {
+        print('❌ Offer was rejected or timed out');
+        throw Exception(
+          'The receiving device did not accept the transfer or timed out',
+        );
+      }
+    } catch (e) {
+      print('❌ Error initiating transfer: $e');
+      rethrow; // Let UI handle the error display
+    }
   }
 
   /// Background isolate that handles the actual file transmission
@@ -615,7 +712,7 @@ class TransferController extends GetxController {
       int progressUpdateCounter = 0;
       final startTime = DateTime.now();
       DateTime lastProgressUpdate = startTime;
-      
+
       while (offset < size) {
         final n = (offset + chunkSize) > size ? (size - offset) : chunkSize;
         final data = await raf.read(n);
@@ -628,18 +725,24 @@ class TransferController extends GetxController {
 
         // Send progress updates more frequently for smooth UI (every chunk for small files,
         // every 2-4 chunks for larger files to avoid overwhelming the UI)
-        final shouldUpdate = size < 10 * 1024 * 1024 // For files < 10MB, update every chunk
-            ? true
-            : progressUpdateCounter >= 2; // For larger files, update every 2 chunks
-        
+        final shouldUpdate =
+            size <
+                    10 *
+                        1024 *
+                        1024 // For files < 10MB, update every chunk
+                ? true
+                : progressUpdateCounter >=
+                    2; // For larger files, update every 2 chunks
+
         if (shouldUpdate) {
           final progressValue = sent / size;
           sendPort.send(progressValue);
           progressUpdateCounter = 0;
-          
+
           // Throttle progress updates to max 10 per second for very large files
           final now = DateTime.now();
-          final timeSinceLastUpdate = now.difference(lastProgressUpdate).inMilliseconds;
+          final timeSinceLastUpdate =
+              now.difference(lastProgressUpdate).inMilliseconds;
           if (timeSinceLastUpdate < 100 && size > 50 * 1024 * 1024) {
             // For very large files (>50MB), add small delay to throttle updates
             await Future.delayed(const Duration(milliseconds: 50));
@@ -660,7 +763,7 @@ class TransferController extends GetxController {
           );
         }
       }
-      
+
       // Ensure final progress update is sent
       sendPort.send(1.0);
       await raf.close();

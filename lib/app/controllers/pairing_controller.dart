@@ -6,7 +6,6 @@ import 'package:network_info_plus/network_info_plus.dart';
 import 'package:device_info_plus/device_info_plus.dart';
 import '../models/device_info.dart';
 import '../models/file_meta.dart';
-import 'transfer_controller.dart';
 
 class PairingController extends GetxController {
   final devices = <DeviceInfo>[].obs;
@@ -21,7 +20,7 @@ class PairingController extends GetxController {
   final isScanning = false.obs;
 
   /// Gets the device name from platform-specific device info
-  /// 
+  ///
   /// **Purpose:** Retrieves a human-readable device name (e.g., "SAMSUNG Galaxy S21", "iPhone 13")
   /// **Why:** Used to display device names during pairing/discovery so users can identify devices
   /// **When called:** Called internally by `startServer()` when starting the pairing server
@@ -47,7 +46,7 @@ class PairingController extends GetxController {
   }
 
   /// Starts the WebSocket server for device discovery and pairing
-  /// 
+  ///
   /// **Purpose:** Creates a WebSocket server on port 7070 that allows other devices to discover
   ///             this device and receive pairing offers. This is the RECEIVER-side pairing server.
   /// **Why:** Enables this device to be discoverable on the network and accept file transfer offers
@@ -55,79 +54,176 @@ class PairingController extends GetxController {
   /// **Side:** RECEIVER side - makes this device available for pairing
   /// **Port:** 7070 (WebSocket for pairing/discovery)
   /// **Note:** This is DIFFERENT from TransferController.startServer() which uses TCP port 9090 for file transfer
-  Future<void> startServer([String? customName]) async {
-    // Use custom name if provided, otherwise get actual device name
-    final actualDeviceName = customName ?? await _getDeviceName();
-    deviceName.value = actualDeviceName;
-    isServer.value = true;
-    final server = await HttpServer.bind(
-      InternetAddress.anyIPv4,
-      wsPort,
-      shared: true,
-    );
-    _wsHttpServer = server;
-    print(
-      'WebSocket Server running on ${_wsHttpServer?.address.address}:$wsPort',
-    );
+  // Future<void> startServer([String? customName]) async {
+  //   // Use custom name if provided, otherwise get actual device name
+  //   final actualDeviceName = customName ?? await _getDeviceName();
+  //   deviceName.value = actualDeviceName;
+  //   isServer.value = true;
+  //   final server = await HttpServer.bind(
+  //     InternetAddress.anyIPv4,
+  //     wsPort,
+  //     shared: true,
+  //   );
+  //   _wsHttpServer = server;
+  //   print(
+  //     'WebSocket Server running on ${_wsHttpServer?.address.address}:$wsPort',
+  //   );
 
-    server.listen((HttpRequest request) async {
-      print(
-        '🌐 WebSocket connection from ${request.connectionInfo?.remoteAddress.address}',
+  //   server.listen((HttpRequest request) async {
+  //     print(
+  //       '🌐 WebSocket connection from ${request.connectionInfo?.remoteAddress.address}',
+  //     );
+  //     if (WebSocketTransformer.isUpgradeRequest(request)) {
+  //       final socket = await WebSocketTransformer.upgrade(request);
+  //       print('🔗 WebSocket upgraded successfully');
+  //       final info = NetworkInfo();
+  //       final wifiIp = await info.getWifiIP();
+  //       final ipToSend = wifiIp ?? _wsHttpServer?.address.address ?? '';
+  //       print(
+  //         '📡 Sending device info: ${deviceName.value} at $ipToSend:$transferPort',
+  //       );
+  //       socket.add(
+  //         jsonEncode({
+  //           'name': deviceName.value.trim(),
+  //           'ip': ipToSend,
+  //           'wsPort': wsPort,
+  //           'transferPort': transferPort,
+  //         }),
+  //       );
+  //       socket.listen(
+  //         (dynamic data) async {
+  //           try {
+  //             final map = jsonDecode(data as String) as Map<String, dynamic>;
+  //             if (map['type'] == 'offer') {
+  //               final fromIp =
+  //                   request.connectionInfo?.remoteAddress.address ?? '';
+  //               print('📥 Received offer from $fromIp: ${map['meta']}');
+  //               print('📝 Setting incomingOffer for UI dialog...');
+  //               _pendingSockets[fromIp] = socket;
+  //               incomingOffer.value = {
+  //                 'fromIp': fromIp,
+  //                 'meta':
+  //                     FileMeta.fromJson(
+  //                       map['meta'] as Map<String, dynamic>,
+  //                     ).toJson(),
+  //               };
+  //               print('✅ incomingOffer set: ${incomingOffer.value}');
+  //             }
+  //           } catch (e) {
+  //             print('Socket error: $e');
+  //           }
+  //         },
+  //         onDone: () {},
+  //         onError: (e) {
+  //           print('Socket onError: $e');
+  //         },
+  //       );
+  //     } else {
+  //       request.response.statusCode = HttpStatus.badRequest;
+  //       await request.response.close();
+  //     }
+  //   });
+  // }
+
+  Future<void> startServer([String? customName]) async {
+    try {
+      // Get device name
+      final actualDeviceName = customName ?? await _getDeviceName();
+      deviceName.value = actualDeviceName;
+      isServer.value = true;
+
+      // Get WiFi IP
+      final info = NetworkInfo();
+      final wifiIp = await info.getWifiIP();
+
+      if (wifiIp == null || wifiIp.isEmpty) {
+        print("❌ No WiFi IP found. Make sure device is connected to WiFi.");
+        return;
+      }
+
+      print("📡 Binding WebSocket Server to WiFi IP: $wifiIp");
+
+      final server = await HttpServer.bind(
+        InternetAddress(wifiIp),
+        wsPort,
+        shared: true,
       );
-      if (WebSocketTransformer.isUpgradeRequest(request)) {
-        final socket = await WebSocketTransformer.upgrade(request);
-        print('🔗 WebSocket upgraded successfully');
-        final info = NetworkInfo();
-        final wifiIp = await info.getWifiIP();
-        final ipToSend = wifiIp ?? _wsHttpServer?.address.address ?? '';
-        print(
-          '📡 Sending device info: $deviceName.value at $ipToSend:$transferPort',
-        );
-        socket.add(
-          jsonEncode({
-            'name': deviceName.value,
-            'ip': ipToSend,
+
+      _wsHttpServer = server;
+
+      print("✅ WebSocket Server running at ws://$wifiIp:$wsPort");
+
+      server.listen((HttpRequest request) async {
+        final remoteIp = request.connectionInfo?.remoteAddress.address;
+        print("🌐 Incoming request from $remoteIp");
+
+        if (!WebSocketTransformer.isUpgradeRequest(request)) {
+          request.response.statusCode = HttpStatus.badRequest;
+          await request.response.close();
+          return;
+        }
+
+        try {
+          final socket = await WebSocketTransformer.upgrade(request);
+          print("🔗 WebSocket upgraded: $remoteIp");
+
+          // Send tagged device info
+          final deviceInfoJson = jsonEncode({
+            'type': 'device_info',
+            'name': deviceName.value.trim(),
+            'ip': wifiIp,
             'wsPort': wsPort,
             'transferPort': transferPort,
-          }),
-        );
-        socket.listen(
-          (dynamic data) async {
-            try {
-              final map = jsonDecode(data as String) as Map<String, dynamic>;
-              if (map['type'] == 'offer') {
-                final fromIp =
-                    request.connectionInfo?.remoteAddress.address ?? '';
-                print('📥 Received offer from $fromIp: ${map['meta']}');
-                print('📝 Setting incomingOffer for UI dialog...');
-                _pendingSockets[fromIp] = socket;
-                incomingOffer.value = {
-                  'fromIp': fromIp,
-                  'meta':
-                      FileMeta.fromJson(
-                        map['meta'] as Map<String, dynamic>,
-                      ).toJson(),
-                };
-                print('✅ incomingOffer set: ${incomingOffer.value}');
+          });
+
+          socket.add(deviceInfoJson);
+          print("📤 Sent device info: $deviceInfoJson");
+
+          socket.listen(
+            (dynamic data) async {
+              try {
+                final map = jsonDecode(data as String) as Map<String, dynamic>;
+                print("📥 Received WS data: $map");
+
+                if (map['type'] == 'offer') {
+                  final fromIp = remoteIp ?? '';
+                  print("📥 File offer received from $fromIp");
+
+                  _pendingSockets[fromIp] = socket;
+
+                  incomingOffer.value = {
+                    'fromIp': fromIp,
+                    'meta':
+                        FileMeta.fromJson(
+                          map['meta'] as Map<String, dynamic>,
+                        ).toJson(),
+                  };
+
+                  print("✅ incomingOffer set for UI: ${incomingOffer.value}");
+                }
+              } catch (e) {
+                print("❌ Error parsing socket data: $e");
               }
-            } catch (e) {
-              print('Socket error: $e');
-            }
-          },
-          onDone: () {},
-          onError: (e) {
-            print('Socket onError: $e');
-          },
-        );
-      } else {
-        request.response.statusCode = HttpStatus.badRequest;
-        await request.response.close();
-      }
-    });
+            },
+            onDone: () {
+              print("🔌 Socket closed: $remoteIp");
+            },
+            onError: (e) {
+              print("❌ Socket error: $e");
+            },
+          );
+        } catch (e) {
+          print("❌ WebSocket upgrade failed: $e");
+        }
+      });
+    } catch (e) {
+      print("❌ Failed to start server: $e");
+      isServer.value = false;
+    }
   }
 
   /// Stops the WebSocket pairing server
-  /// 
+  ///
   /// **Purpose:** Closes the WebSocket server (port 7070) that was used for device discovery
   /// **Why:** Allows the device to stop being discoverable and frees up network resources
   /// **When called:** Called when user wants to stop being discoverable or when app closes
@@ -140,7 +236,7 @@ class PairingController extends GetxController {
   }
 
   /// Scans the local network to discover other devices running the pairing server
-  /// 
+  ///
   /// **Purpose:** Scans all IPs in the local network subnet (e.g., 192.168.1.1-255) to find
   ///             devices that have started their pairing server (WebSocket on port 7070)
   /// **Why:** Allows users to see a list of available devices they can send files to
@@ -165,15 +261,17 @@ class PairingController extends GetxController {
           final existing = devices.where((e) => e.ip == d.ip).isNotEmpty;
           if (!existing) {
             devices.add(d);
-            print('✅ Added device to list: ${d.name}');
+            print(
+              '✅ Added device to list: ${d.name} (${devices.length} total devices)',
+            );
           } else {
             print('⚠️ Device already in list: ${d.name}');
           }
         } else {
-          print('🚫 Skipping own device: ${d.ip}');
+          print('🚫 Skipping own device: ${d.ip} (local IP: $localIp)');
         }
       } else if (msg is String && msg == 'done') {
-        print('🔍 Device discovery completed');
+        print('🔍 Device discovery completed. Found ${devices.length} devices');
         isScanning.value = false;
       }
     });
@@ -184,7 +282,7 @@ class PairingController extends GetxController {
   }
 
   /// Connects to a discovered device to verify it's available and get its full info
-  /// 
+  ///
   /// **Purpose:** Establishes a quick WebSocket connection to a discovered device to confirm
   ///             it's online and retrieve its complete device information
   /// **Why:** Validates that a discovered device is still active and gets updated device details
@@ -212,7 +310,7 @@ class PairingController extends GetxController {
   }
 
   /// Sends a file transfer offer to a receiver device
-  /// 
+  ///
   /// **Purpose:** Connects to a receiver's WebSocket server (port 7070) and sends a file transfer
   ///             offer containing file metadata. Waits for receiver's accept/reject response.
   /// **Why:** Allows sender to request permission before starting the actual file transfer
@@ -230,7 +328,7 @@ class PairingController extends GetxController {
         uri.toString(),
       ).timeout(const Duration(seconds: 5)); // Increased timeout for connection
       print('✅ Connected to receiver WS. Sending offer data...');
-      
+
       final offerJson = jsonEncode({'type': 'offer', 'meta': meta.toJson()});
       ws.add(offerJson);
       print('📤 Offer sent: $offerJson');
@@ -284,41 +382,26 @@ class PairingController extends GetxController {
   }
 
   /// Responds to an incoming file transfer offer from a sender
-  /// 
+  ///
   /// **Purpose:** When a sender sends a file transfer offer, this function sends back an
-  ///             accept or reject response. If accepted, it also starts the TCP file transfer server.
-  /// **Why:** Allows receiver to accept/reject file transfers and prepares for file reception
+  ///             accept or reject response via WebSocket.
+  /// **Why:** Allows receiver to accept/reject file transfers
   /// **When called:** Called when user accepts or rejects an incoming file transfer offer dialog
   /// **Side:** RECEIVER side - responds to sender's file transfer offer
-  /// **Flow:** 1. If accepted, starts TransferController.startServer() (TCP port 9090) →
-  ///          2. Sends accept/reject response via WebSocket → 3. Closes WebSocket connection
-  /// **Note:** The actual file reception happens in TransferController.startServer() TCP listener
+  /// **Flow:** 1. Sends accept/reject response via WebSocket → 2. Closes WebSocket connection
+  /// **Note:** UI layer should handle navigation and transfer server setup after acceptance
   Future<void> respondToOffer(String fromIp, bool accept) async {
     print('📤 Sending ${accept ? 'ACCEPT' : 'REJECT'} response to $fromIp');
-
-    if (accept) {
-      // Start TCP server for receiving files
-      try {
-        final transfer = Get.find<TransferController>();
-        print('🔄 Starting TCP server before accepting...');
-        await transfer.startServer();
-        // Give the server a moment to fully bind
-        await Future.delayed(const Duration(milliseconds: 200));
-        print('✅ TCP server ready, sending accept response');
-      } catch (e) {
-        print('⚠️ Could not start transfer server: $e');
-        accept = false; // Don't accept if server failed
-      }
-    }
 
     final ws = _pendingSockets.remove(fromIp);
     if (ws != null) {
       try {
-        final responseJson = jsonEncode({'type': 'offer_response', 'accept': accept});
+        final responseJson = jsonEncode({
+          'type': 'offer_response',
+          'accept': accept,
+        });
         ws.add(responseJson);
-        print(
-          '📤 Response sent: $responseJson',
-        );
+        print('📤 Response sent: $responseJson');
         // Give the message time to be sent before closing
         await Future.delayed(const Duration(milliseconds: 100));
         await ws.close();
@@ -337,7 +420,7 @@ class PairingController extends GetxController {
   }
 
   /// Background isolate that scans the network for discoverable devices
-  /// 
+  ///
   /// **Purpose:** Runs in a separate isolate to scan all IPs in the local subnet (1-254) without
   ///             blocking the main UI thread. Connects to each IP's WebSocket port 7070 to find devices.
   /// **Why:** Network scanning is slow (255 IPs × 300ms timeout), so it needs to run in background
@@ -366,7 +449,7 @@ class PairingController extends GetxController {
   }
 
   /// Gets the local IP address of this device
-  /// 
+  ///
   /// **Purpose:** Returns the IP address that the WebSocket pairing server is bound to
   /// **Why:** Used to display this device's IP address or for network-related operations
   /// **When called:** Called when UI needs to display the device's IP address

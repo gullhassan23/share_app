@@ -10,6 +10,10 @@ class ChooseFileScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final DeviceInfo device = Get.arguments as DeviceInfo;
+    print("device infor ${device.ip}");
+    print("device infor ${device.name}");
+    print("device infor ${device.transferPort}");
+    print("device infor ${device.wsPort}");
     return Scaffold(
       appBar: AppBar(
         centerTitle: true,
@@ -22,7 +26,7 @@ class ChooseFileScreen extends StatelessWidget {
           children: [
             // Device name input and controls
             Text(
-              'Connected to ${device.name}',
+              'Connected to ${device.name ?? ''}',
               style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w500),
               textAlign: TextAlign.center,
             ),

@@ -40,6 +40,10 @@ class AppNavigator {
     return Get.toNamed(AppRoutes.transferFile, arguments: device);
   }
 
+  static void toReceivedFiles() {
+    Get.toNamed(AppRoutes.receivedFiles);
+  }
+
   static void back() {
     if (Get.key.currentState?.canPop() ?? false) {
       Get.back();

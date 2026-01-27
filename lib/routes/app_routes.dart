@@ -7,4 +7,5 @@ abstract class AppRoutes {
   static const pairing = '/pairing';
   static const chooseFile = '/choose-file';
   static const transferFile = '/transfer-file';
+  static const receivedFiles = '/received-files';
 }
