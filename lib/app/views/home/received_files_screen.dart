@@ -3,12 +3,15 @@ import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:open_filex/open_filex.dart';
-import 'package:path/path.dart' as p;
+import 'package:share_app_latest/app/models/device_info.dart';
+
 import 'package:share_app_latest/components/bg_curve_Ellipes.dart';
+import 'package:share_app_latest/routes/app_navigator.dart';
 import '../../controllers/transfer_controller.dart';
 
 class ReceivedFilesScreen extends StatefulWidget {
-  const ReceivedFilesScreen({super.key});
+  final DeviceInfo? device;
+  const ReceivedFilesScreen({Key? key, this.device}) : super(key: key);
 
   @override
   State<ReceivedFilesScreen> createState() => _ReceivedFilesScreenState();
@@ -32,7 +35,26 @@ class _ReceivedFilesScreenState extends State<ReceivedFilesScreen> {
               child: CustomPaint(painter: BackgroundEllipses()),
             ),
           ),
-
+          Positioned(
+            top: 2,
+            left: 8,
+            child: SafeArea(
+              child: IconButton(
+                onPressed: () {
+                  if (widget.device != null) {
+                    AppNavigator.toChooseFile(device: widget.device!);
+                  } else {
+                    Get.back(); 
+                  }
+                },
+                icon: const Icon(
+                  Icons.arrow_back,
+                  color: Colors.white,
+                  size: 26,
+                ),
+              ),
+            ),
+          ),
           SafeArea(
             child: Column(
               children: [
@@ -317,7 +339,7 @@ class _ReceivedFilesScreenState extends State<ReceivedFilesScreen> {
     );
   }
 
-  Widget _getFileIcon(String fileType) {
+  Widget getFileIcon(String fileType) {
     IconData icon;
     Color color;
 
@@ -354,7 +376,7 @@ class _ReceivedFilesScreenState extends State<ReceivedFilesScreen> {
     );
   }
 
-  String _formatFileSize(int bytes) {
+  String formatFileSize(int bytes) {
     if (bytes < 1024) return '$bytes B';
     if (bytes < 1024 * 1024) return '${(bytes / 1024).toStringAsFixed(1)} KB';
     if (bytes < 1024 * 1024 * 1024)
@@ -362,7 +384,7 @@ class _ReceivedFilesScreenState extends State<ReceivedFilesScreen> {
     return '${(bytes / (1024 * 1024 * 1024)).toStringAsFixed(1)} GB';
   }
 
-  String _formatTimestamp(DateTime timestamp) {
+  String formatTimestamp(DateTime timestamp) {
     final now = DateTime.now();
     final difference = now.difference(timestamp);
 
@@ -377,7 +399,7 @@ class _ReceivedFilesScreenState extends State<ReceivedFilesScreen> {
     }
   }
 
-  void _saveFile(String filePath, String fileName) async {
+  void saveFile(String filePath, String fileName) async {
     try {
       await transfer.saveToDownloads(filePath, fileName);
     } catch (e) {
@@ -390,7 +412,7 @@ class _ReceivedFilesScreenState extends State<ReceivedFilesScreen> {
     }
   }
 
-  void _deleteFile(int index, String filePath) {
+  void deleteFile(int index, String filePath) {
     Get.dialog(
       AlertDialog(
         title: const Text('Delete File'),

@@ -4,7 +4,6 @@ import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:path/path.dart' as p;
-import 'package:share_app_latest/app/views/home/choose_file/choose_file_screen.dart';
 import 'package:share_app_latest/components/bg_curve_Ellipes.dart';
 import 'package:share_app_latest/components/custom_upload_bar.dart';
 
@@ -13,6 +12,7 @@ import '../../../../controllers/transfer_controller.dart';
 import '../../../../controllers/pairing_controller.dart';
 import '../../../../models/device_info.dart';
 import '../../../../models/file_meta.dart';
+import 'package:share_app_latest/routes/app_navigator.dart';
 
 class TransferFileScreen extends StatefulWidget {
   const TransferFileScreen({super.key});
@@ -33,7 +33,24 @@ class _TransferFileScreenState extends State<TransferFileScreen> {
   @override
   void initState() {
     super.initState();
-    device = Get.arguments as DeviceInfo;
+
+    final dynamic args = Get.arguments;
+    if (args == null || args is! DeviceInfo) {
+      print(
+        "❌ Error: Invalid or missing DeviceInfo arguments in TransferFileScreen",
+      );
+      // Handle error - maybe navigate back
+      Future.microtask(() {
+        Get.back();
+        Get.snackbar('Error', 'Invalid device information');
+      });
+      return;
+    }
+
+    device = args;
+    print(
+      "📤 TransferFileScreen initialized with device: ${device.name} at ${device.ip}",
+    );
 
     // Auto-close this screen as soon as the upload completes successfully.
     // This does NOT change transfer logic; it only reacts to existing progress signals.
@@ -78,11 +95,12 @@ class _TransferFileScreenState extends State<TransferFileScreen> {
           snackPosition: SnackPosition.BOTTOM,
           duration: const Duration(seconds: 2),
         );
-        Get.to(() => ChooseFileScreen());
-        // Auto-navigate back after showing success message
+
+        // Navigate back to home screen after successful transfer
+        // Don't create new ChooseFileScreen as it requires DeviceInfo arguments
         Future.delayed(const Duration(seconds: 2), () {
-          if (mounted && Get.key.currentState?.canPop() == true) {
-            Get.back();
+          if (mounted) {
+            AppNavigator.toChooseFile(device: device);
           }
         });
       }
@@ -216,11 +234,7 @@ class _TransferFileScreenState extends State<TransferFileScreen> {
       if (accepted) {
         print('✅ Offer accepted! Starting file transfer...');
         // Transfer the file
-        await transfer.sendFile(
-          path,
-          device.ip ?? "",
-          device.transferPort,
-        );
+        await transfer.sendFile(path, device.ip, device.transferPort);
       } else {
         print('❌ Offer was rejected or timed out');
         Get.snackbar(
@@ -311,164 +325,168 @@ class _TransferFileScreenState extends State<TransferFileScreen> {
           ),
 
           SafeArea(
-            child: Column(
-              children: [
-                const SizedBox(height: 100),
+            child: SingleChildScrollView(
+              child: Column(
+                children: [
+                  const SizedBox(height: 100),
 
-                /// Top Info Card
-                Container(
-                  margin: const EdgeInsets.only(top: 80, left: 12, right: 12),
-                  padding: const EdgeInsets.all(8),
-                  decoration: BoxDecoration(
-                    image: const DecorationImage(
-                      image: AssetImage("assets/icons/global.png"),
-                      fit: BoxFit.contain,
-                      alignment: Alignment.centerRight,
+                  /// Top Info Card
+                  Container(
+                    margin: const EdgeInsets.only(top: 80, left: 12, right: 12),
+                    padding: const EdgeInsets.all(8),
+                    decoration: BoxDecoration(
+                      image: const DecorationImage(
+                        image: AssetImage("assets/icons/global.png"),
+                        fit: BoxFit.contain,
+                        alignment: Alignment.centerRight,
+                      ),
+                      color: Colors.white,
+                      borderRadius: BorderRadius.circular(16),
+                      boxShadow: [
+                        BoxShadow(
+                          color: Colors.black.withOpacity(0.08),
+                          blurRadius: 20,
+                          offset: const Offset(0, 10),
+                        ),
+                      ],
                     ),
-                    color: Colors.white,
-                    borderRadius: BorderRadius.circular(16),
-                    boxShadow: [
-                      BoxShadow(
-                        color: Colors.black.withOpacity(0.08),
-                        blurRadius: 20,
-                        offset: const Offset(0, 10),
-                      ),
-                    ],
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.center,
+                      children: [
+                        Container(
+                          height: 50,
+                          width: 50,
+                          decoration: BoxDecoration(
+                            borderRadius: BorderRadius.circular(50),
+                            color: Colors.white,
+                          ),
+                          child: Padding(
+                            padding: const EdgeInsets.all(8.0),
+                            child: Image.asset("assets/icons/cloud_image.png"),
+                          ),
+                        ),
+                        Container(
+                          height: 100,
+                          width: 180,
+                          child: Padding(
+                            padding: const EdgeInsets.all(1.0),
+                            child: Image.asset(
+                              "assets/icons/document_image.png",
+                            ),
+                          ),
+                        ),
+                        const SizedBox(height: 30),
+                        Text(
+                          "UPLOADING DATA....",
+                          style: GoogleFonts.roboto(
+                            color: Colors.blue,
+                            fontSize: 20,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                        Text(
+                          "PLEASE KEEP THIS SCREEN OPEN",
+                          style: GoogleFonts.roboto(
+                            color: Colors.blue,
+                            fontSize: 10,
+                          ),
+                        ),
+                        const SizedBox(height: 30),
+                      ],
+                    ),
                   ),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.center,
-                    children: [
-                      Container(
-                        height: 50,
-                        width: 50,
-                        decoration: BoxDecoration(
-                          borderRadius: BorderRadius.circular(50),
-                          color: Colors.white,
-                        ),
-                        child: Padding(
-                          padding: const EdgeInsets.all(8.0),
-                          child: Image.asset("assets/icons/cloud_image.png"),
-                        ),
-                      ),
-                      Container(
-                        height: 100,
-                        width: 180,
-                        child: Padding(
-                          padding: const EdgeInsets.all(1.0),
-                          child: Image.asset("assets/icons/document_image.png"),
-                        ),
-                      ),
-                      const SizedBox(height: 30),
-                      Text(
-                        "UPLOADING DATA....",
-                        style: GoogleFonts.roboto(
-                          color: Colors.blue,
-                          fontSize: 20,
-                          fontWeight: FontWeight.bold,
-                        ),
-                      ),
-                      Text(
-                        "PLEASE KEEP THIS SCREEN OPEN",
-                        style: GoogleFonts.roboto(
-                          color: Colors.blue,
-                          fontSize: 10,
-                        ),
-                      ),
-                      const SizedBox(height: 30),
-                    ],
-                  ),
-                ),
 
-                /// Main Content
-                Padding(
-                  padding: const EdgeInsets.all(16),
-                  child: Column(
-                    children: [
-                      /// Select File Button
-                      SizedBox(
-                        width: double.infinity,
-                        child: ElevatedButton(
-                          onPressed: _showFileTypeSelection,
-                          child: const Text('Select File'),
+                  /// Main Content
+                  Padding(
+                    padding: const EdgeInsets.all(16),
+                    child: Column(
+                      children: [
+                        /// Select File Button
+                        SizedBox(
+                          width: double.infinity,
+                          child: ElevatedButton(
+                            onPressed: _showFileTypeSelection,
+                            child: const Text('Select File'),
+                          ),
                         ),
-                      ),
 
-                      const SizedBox(height: 24),
+                        const SizedBox(height: 24),
 
-                      /// Upload Progress Section
-                      Obx(() {
-                        if (progress.status.value.isEmpty &&
-                            progress.error.value.isEmpty) {
+                        /// Upload Progress Section
+                        Obx(() {
+                          if (progress.status.value.isEmpty &&
+                              progress.error.value.isEmpty) {
+                            return Column(
+                              children: [
+                                const CircularProgressIndicator(),
+                                const SizedBox(height: 16),
+                                const Text(
+                                  'Waiting for receiver to accept...',
+                                  textAlign: TextAlign.center,
+                                ),
+                                const SizedBox(height: 8),
+                                Text(
+                                  'Device: ${device.name}',
+                                  style: const TextStyle(
+                                    fontSize: 12,
+                                    color: Colors.grey,
+                                  ),
+                                ),
+                              ],
+                            );
+                          }
+
                           return Column(
                             children: [
-                              const CircularProgressIndicator(),
-                              const SizedBox(height: 16),
-                              const Text(
-                                'Waiting for receiver to accept...',
-                                textAlign: TextAlign.center,
+                              /// Custom Upload Bar
+                              CustomUploadProgress(
+                                progress: progress.sendProgress.value,
+                                sentMB: progress.sentMB.value,
+                                totalMB: progress.totalMB.value,
+                                speedMBps: progress.speedMBps.value,
                               ),
-                              const SizedBox(height: 8),
-                              Text(
-                                'Device: ${device.name}',
-                                style: const TextStyle(
-                                  fontSize: 12,
-                                  color: Colors.grey,
+
+                              const SizedBox(height: 16),
+
+                              /// Cancel Button
+                              SizedBox(
+                                width: double.infinity,
+                                child: ElevatedButton(
+                                  style: ElevatedButton.styleFrom(
+                                    backgroundColor: const Color(0xFF2F3944),
+                                    padding: const EdgeInsets.symmetric(
+                                      vertical: 14,
+                                    ),
+                                    shape: RoundedRectangleBorder(
+                                      borderRadius: BorderRadius.circular(30),
+                                    ),
+                                  ),
+                                  onPressed: () {
+                                    // transfer.cancelTransfer();
+                                  },
+                                  child: const Text(
+                                    "CANCEL UPLOAD",
+                                    style: TextStyle(color: Colors.white),
+                                  ),
                                 ),
                               ),
+
+                              if (progress.error.value.isNotEmpty)
+                                Padding(
+                                  padding: const EdgeInsets.only(top: 8),
+                                  child: Text(
+                                    progress.error.value,
+                                    style: const TextStyle(color: Colors.red),
+                                  ),
+                                ),
                             ],
                           );
-                        }
-
-                        return Column(
-                          children: [
-                            /// Custom Upload Bar
-                            CustomUploadProgress(
-                              progress: progress.sendProgress.value,
-                              sentMB: progress.sentMB.value,
-                              totalMB: progress.totalMB.value,
-                              speedMBps: progress.speedMBps.value,
-                            ),
-
-                            const SizedBox(height: 16),
-
-                            /// Cancel Button
-                            SizedBox(
-                              width: double.infinity,
-                              child: ElevatedButton(
-                                style: ElevatedButton.styleFrom(
-                                  backgroundColor: const Color(0xFF2F3944),
-                                  padding: const EdgeInsets.symmetric(
-                                    vertical: 14,
-                                  ),
-                                  shape: RoundedRectangleBorder(
-                                    borderRadius: BorderRadius.circular(30),
-                                  ),
-                                ),
-                                onPressed: () {
-                                  // transfer.cancelTransfer();
-                                },
-                                child: const Text(
-                                  "CANCEL UPLOAD",
-                                  style: TextStyle(color: Colors.white),
-                                ),
-                              ),
-                            ),
-
-                            if (progress.error.value.isNotEmpty)
-                              Padding(
-                                padding: const EdgeInsets.only(top: 8),
-                                child: Text(
-                                  progress.error.value,
-                                  style: const TextStyle(color: Colors.red),
-                                ),
-                              ),
-                          ],
-                        );
-                      }),
-                    ],
+                        }),
+                      ],
+                    ),
                   ),
-                ),
-              ],
+                ],
+              ),
             ),
           ),
         ],

@@ -132,19 +132,41 @@ class PairingController extends GetxController {
       deviceName.value = actualDeviceName;
       isServer.value = true;
 
-      // Get WiFi IP
+      // Get WiFi IP - try multiple methods
       final info = NetworkInfo();
-      final wifiIp = await info.getWifiIP();
+      String? wifiIp = await info.getWifiIP();
 
       if (wifiIp == null || wifiIp.isEmpty) {
-        print("❌ No WiFi IP found. Make sure device is connected to WiFi.");
-        return;
+        print("⚠️ WiFi IP not found via NetworkInfo, trying alternative methods...");
+        // Try to get IP from network interfaces
+        try {
+          final interfaces = await NetworkInterface.list();
+          for (final interface in interfaces) {
+            for (final addr in interface.addresses) {
+              if (addr.type == InternetAddressType.IPv4 && !addr.isLoopback) {
+                wifiIp = addr.address;
+                print("📡 Found IP via NetworkInterface: $wifiIp");
+                break;
+              }
+            }
+            if (wifiIp != null) break;
+          }
+        } catch (e) {
+          print("❌ Error getting IP from NetworkInterface: $e");
+        }
       }
 
-      print("📡 Binding WebSocket Server to WiFi IP: $wifiIp");
+      if (wifiIp == null || wifiIp.isEmpty) {
+        print("❌ No suitable IP found. Falling back to any IPv4.");
+        wifiIp = InternetAddress.anyIPv4.address;
+      }
+
+      print("📡 Binding WebSocket Server to IP: $wifiIp");
 
       final server = await HttpServer.bind(
-        InternetAddress(wifiIp),
+        wifiIp == InternetAddress.anyIPv4.address
+            ? InternetAddress.anyIPv4
+            : InternetAddress(wifiIp),
         wsPort,
         shared: true,
       );
@@ -245,30 +267,76 @@ class PairingController extends GetxController {
   /// **How:** Uses an isolate to scan network in parallel without blocking UI
   Future<void> discover() async {
     final info = NetworkInfo();
-    final localIp = await info.getWifiIP();
-    if (localIp == null) return;
+    String? localIp = await info.getWifiIP();
+
+    if (localIp == null || localIp.isEmpty) {
+      print("⚠️ Local IP not found via NetworkInfo, trying alternative methods...");
+      try {
+        final interfaces = await NetworkInterface.list();
+        for (final interface in interfaces) {
+          for (final addr in interface.addresses) {
+            if (addr.type == InternetAddressType.IPv4 && !addr.isLoopback) {
+              localIp = addr.address;
+              print("📡 Found local IP via NetworkInterface: $localIp");
+              break;
+            }
+          }
+          if (localIp != null) break;
+        }
+      } catch (e) {
+        print("❌ Error getting local IP: $e");
+        return;
+      }
+    }
+
+    if (localIp == null || localIp.isEmpty) {
+      print("❌ Cannot determine local IP for network scanning");
+      return;
+    }
+
     final base = localIp.split('.');
+    if (base.length != 4) {
+      print("❌ Invalid IP format: $localIp");
+      return;
+    }
+
     final prefix = '${base[0]}.${base[1]}.${base[2]}';
+    print("🔍 Scanning network: $prefix.1-254");
     _scanReceivePort?.close();
     _scanReceivePort = ReceivePort();
     isScanning.value = true;
     _scanReceivePort!.listen((dynamic msg) {
       if (msg is Map<String, dynamic>) {
-        final d = DeviceInfo.fromJson(msg);
-        print('🔍 Found device: ${d.name} at ${d.ip}:${d.transferPort}');
-        // Don't add our own device to the list
-        if (d.ip != localIp) {
-          final existing = devices.where((e) => e.ip == d.ip).isNotEmpty;
-          if (!existing) {
-            devices.add(d);
-            print(
-              '✅ Added device to list: ${d.name} (${devices.length} total devices)',
-            );
-          } else {
-            print('⚠️ Device already in list: ${d.name}');
+        try {
+          final d = DeviceInfo.fromJson(msg);
+
+          // Validate device info
+          if (d.name.isEmpty) {
+            print('⚠️ Skipping device with empty name');
+            return;
           }
-        } else {
-          print('🚫 Skipping own device: ${d.ip} (local IP: $localIp)');
+          if (d.ip.isEmpty) {
+            print('⚠️ Skipping device with empty IP');
+            return;
+          }
+
+          print('🔍 Found device: ${d.name} at ${d.ip}:${d.transferPort}');
+          // Don't add our own device to the list
+          if (d.ip != localIp) {
+            final existing = devices.where((e) => e.ip == d.ip).isNotEmpty;
+            if (!existing) {
+              devices.add(d);
+              print(
+                '✅ Added device to list: ${d.name} (${devices.length} total devices)',
+              );
+            } else {
+              print('⚠️ Device already in list: ${d.name}');
+            }
+          } else {
+            print('🚫 Skipping own device: ${d.ip} (local IP: $localIp)');
+          }
+        } catch (e) {
+          print('❌ Error parsing device info: $e');
         }
       } else if (msg is String && msg == 'done') {
         print('🔍 Device discovery completed. Found ${devices.length} devices');

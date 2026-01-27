@@ -42,23 +42,34 @@ class _PairingScreenState extends State<PairingScreen>
 
   void _pairWithDevice(DeviceInfo device) async {
     try {
-      print('🔄 Starting pairing process with device: ${device.name} at ${device.ip}');
+      print(
+        '🔄 Starting pairing process with device: ${device.name} at ${device.ip}',
+      );
+
+      // Validate device object
+      if (device.ip.isEmpty) {
+        print('❌ Error: Device IP is empty');
+        Get.snackbar('Error', 'Device IP is not available');
+        return;
+      }
 
       // Start WebSocket server for pairing (needed for offers)
       await pairing.startServer();
       print('✅ WebSocket server started');
 
       // Navigate to mode selection page
-      print('🔄 Navigating to choose file mode for device: ${device.name}');
+      print(
+        '🔄 Navigating to choose file mode for device: ${device.name} at ${device.ip}',
+      );
+      print('🔄 Device object: $device');
       final result = await AppNavigator.toChooseFile(device: device);
+      print('🔄 Navigation result: $result');
 
       if (result != null) {
         final isSender = result['isSender'] as bool;
         final selectedDevice = result['device'] as DeviceInfo;
 
-        print(
-          '🔄 User selected ${isSender ? 'sending' : 'receiving'} mode',
-        );
+        print('🔄 User selected ${isSender ? 'sending' : 'receiving'} mode');
 
         if (isSender) {
           // For senders: Navigate to TransferFileScreen to select and send files
@@ -186,7 +197,9 @@ class _PairingScreenState extends State<PairingScreen>
               await transferController.startServer();
 
               // Navigate to received files screen
-              await Future.delayed(const Duration(milliseconds: 200)); // Small delay for UI smoothness
+              await Future.delayed(
+                const Duration(milliseconds: 200),
+              ); // Small delay for UI smoothness
               AppNavigator.toReceivedFiles();
             },
             child: const Text('Accept'),
@@ -418,17 +431,20 @@ class _PairingScreenState extends State<PairingScreen>
                                 ),
                               ),
                               const SizedBox(height: 8),
-                            const Text(
-                              'Make sure both devices are on the same Wi-Fi network and running this app.',
-                              textAlign: TextAlign.center,
-                              style: TextStyle(color: Colors.grey),
-                            ),
-                            const SizedBox(height: 8),
-                            const Text(
-                              'Note: You need at least 2 devices to test pairing.',
-                              textAlign: TextAlign.center,
-                              style: TextStyle(color: Colors.grey, fontSize: 12),
-                            ),
+                              const Text(
+                                'Make sure both devices are on the same Wi-Fi network and running this app.',
+                                textAlign: TextAlign.center,
+                                style: TextStyle(color: Colors.grey),
+                              ),
+                              const SizedBox(height: 8),
+                              const Text(
+                                'Note: You need at least 2 devices to test pairing.',
+                                textAlign: TextAlign.center,
+                                style: TextStyle(
+                                  color: Colors.grey,
+                                  fontSize: 12,
+                                ),
+                              ),
                               const SizedBox(height: 24),
                               ElevatedButton.icon(
                                 onPressed:

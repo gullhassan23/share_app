@@ -25,6 +25,10 @@ class AppNavigator {
     Get.offAllNamed(AppRoutes.home);
   }
 
+  // static void toChooseFile() {
+  //   Get.offAllNamed(AppRoutes.chooseFile);
+  // }
+
   static void toPairing() {
     Get.toNamed(AppRoutes.pairing);
   }
